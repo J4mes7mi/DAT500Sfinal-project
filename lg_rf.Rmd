@@ -1,0 +1,233 @@
+---
+title: "Linear Regression and RF"
+output: html_document
+date: "2024-12-03"
+---
+```{r}
+file_path <- "default_of_credit_card_clients.CSV"  # 替换为文件路径  
+data <- read.csv(file_path) 
+
+```
+
+```{r}
+data$`default.payment.next.month` <- as.factor(data$`default.payment.next.month`)  
+
+# 检查缺失值  
+sum(is.na(data))  
+```
+
+```{r}
+set.seed(123)  # 设置随机种子以保证结果可重复  
+sample_index <- sample(1:nrow(data), size = 0.7 * nrow(data))  # 随机抽取 80% 的索引  
+train_data <- data[sample_index, ]  # 训练集  
+test_data <- data[-sample_index, ]  # 测试集  
+cat("Train dataset size:", nrow(train_data), "\n")  
+cat("Test dataset size:", nrow(test_data), "\n")  
+table(train_data$default.payment.next.month)  
+```
+##P值带星号说明有显著相关性 
+```{r}
+model <- glm(default.payment.next.month ~ ., data = train_data, family = binomial)  
+
+
+summary(model)  
+
+```
+
+```{r}
+
+predictions <- predict(model, newdata = test_data, type = "response")  
+# 将预测值转换为分类（0 或 1）  
+predicted_class <- ifelse(predictions > 0.5, 1, 0)  
+
+```
+##除了目标变量外全部一起丢进去在Logistic Regression中的训练结果
+
+```{r}
+confusion_matrix <- table(Predicted = predicted_class, Actual = test_data$default.payment.next.month)  
+print(confusion_matrix)  
+
+# 计算准确率  
+accuracy <- sum(diag(confusion_matrix)) / sum(confusion_matrix)  
+print(paste("Error Rate:", round(1-accuracy, 4)))  
+
+```
+```{r}
+
+predictions <- predict(model, newdata = train_data, type = "response")  
+# 将预测值转换为分类（0 或 1）  
+predicted_class_train <- ifelse(predictions > 0.5, 1, 0)  
+# 计算训练误差  
+train_error <- mean(predicted_class_train != train_data$default.payment.next.month)  
+print(train_error)
+```
+
+####丢进去PAY_0+PAY_2+LIMIT_BAL+PAY_AMT1+PAY_3+AGE+SEX在Logistic Regression中的训练结果
+```{r}
+model2 <- glm(default.payment.next.month ~ PAY_0+PAY_2+LIMIT_BAL+PAY_AMT1+PAY_3+AGE+SEX, data = train_data, family = binomial)  
+
+
+summary(model2)  
+```
+
+```{r}
+predictions2 <- predict(model2, newdata = test_data, type = "response")  
+# 将预测值转换为分类（0 或 1）  
+predicted_class2 <- ifelse(predictions2 > 0.5, 1, 0)  
+
+```
+
+```{r}
+
+predictions_train2 <- predict(model2, newdata = train_data, type = "response")  
+# 将预测值转换为分类（0 或 1）  
+predicted_class_train2 <- ifelse(predictions_train2 > 0.5, 1, 0)  
+# 计算测试误差  
+train_error2 <- mean(predicted_class_train2 != train_data$default.payment.next.month)  
+print(train_error2)
+```
+
+```{r}
+library(randomForest)
+set.seed(123)  # 设置随机种子  
+rf.fit <- randomForest(default.payment.next.month ~ ., data = train_data, mtry = 2)  
+```
+
+```{r}
+print(rf.fit) 
+```
+
+```{r}
+rf.probs <- predict(rf.fit, newdata = test_data, type = "prob")[, 2]  # 获取预测概率  
+rf.pred <- ifelse(rf.probs > 0.5, 1, 0)  # 将概率转换为分类（0 或 1）  
+
+```
+##除了目标变量外全部一起丢进去在Randomforest中的训练结果
+```{r}
+confusion_matrix <- table(Predicted = rf.pred,Actual = test_data$default.payment.next.month)  
+print(confusion_matrix) 
+```
+
+```{r}
+accuracy <- sum(diag(confusion_matrix)) / sum(confusion_matrix)  
+print(paste("Error Rate:", round(1-accuracy, 4)))  
+
+```
+```{r}
+# 对训练集进行预测  
+train_predictions <- predict(rf.fit, train_data)
+# 计算训练误差  
+train_error <- mean(train_predictions != train_data$default.payment.next.month)  
+print(train_error)
+```
+##Partial Randomforest
+```{r}
+set.seed(123)
+rf.fit2 <- randomForest(default.payment.next.month ~PAY_0+PAY_2+LIMIT_BAL+PAY_AMT1+PAY_3+AGE+SEX , data = train_data, mtry = 2)  
+print(rf.fit2) 
+```
+
+```{r}
+rf.probs2 <- predict(rf.fit2, newdata = test_data, type = "prob")[, 2]  # 获取预测概率  
+rf.pred2 <- ifelse(rf.probs2 > 0.5, 1, 0)  # 将概率转换为分类（0 或 1）  
+```
+
+```{r}
+confusion_matrix2 <- table(Predicted = rf.pred2,Actual = test_data$default.payment.next.month)  
+print(confusion_matrix2)  
+```
+```{r}
+accuracy <- sum(diag(confusion_matrix)) / sum(confusion_matrix)  
+print(paste("Error Rate:", round(1-accuracy, 4)))  
+
+```
+```{r}
+# 对训练集进行预测
+train_predictions2 <- predict(rf.fit2, train_data)
+# 计算训练误差  
+train_error2 <- mean(train_predictions2 != train_data$default.payment.next.month)  
+print(train_error2)
+```
+
+
+
+##引入smote算法处理不平衡极端数据集，此处可引用文章。输出为平衡之后的目标变量比例
+```{r}
+library(smotefamily)  
+set.seed(123)
+smote_result <- SMOTE(X = train_data[, -ncol(train_data)],   
+                      target = train_data$default.payment.next.month,   
+                      K = 5, dup_size = 2)  
+
+train_data_smote <- smote_result$data  
+train_data_smote$default.payment.next.month <- as.factor(train_data_smote$class)  
+train_data_smote$class <- NULL   
+
+ 
+table(train_data_smote$default.payment.next.month)  
+```
+
+
+##新数据集全变量训练Randomforest结果
+``` {r}
+set.seed(123)  # 设置随机种子  
+rf.fit4 <- randomForest(default.payment.next.month ~ ., data = train_data_smote, mtry = 2)  
+
+# 查看模型摘要  
+print(rf.fit4)  
+
+# 5. 模型预测和评估  
+# 在测试集上进行预测  
+rf.probs4 <- predict(rf.fit4, newdata = test_data, type = "prob")[, 2]  
+rf.pred4 <- ifelse(rf.probs4 > 0.5, 1, 0)  
+
+# 计算混淆矩阵  
+confusion_matrix4 <- table(Actual = test_data$default.payment.next.month, Predicted = rf.pred4)  
+print(confusion_matrix4)  
+
+# 计算准确率  
+accuracy4 <- sum(diag(confusion_matrix4)) / sum(confusion_matrix4)  
+print(paste("Accuracy:", round(accuracy4, 4)))
+print(paste("Error Rate:", round(1-accuracy4, 4)))
+##计算训练误差
+rf.probs4_train <- predict(rf.fit4, newdata = train_data, type = "prob")[, 2]  
+rf.pred4_train <- ifelse(rf.probs4_train > 0.5, 1, 0)  
+confusion_matrix4_train <- table(Actual = train_data$default.payment.next.month, Predicted = rf.pred4_train)
+accuracy4_train <- sum(diag(confusion_matrix4_train)) / sum(confusion_matrix4_train)  
+print(paste("Train Error:", round(1-accuracy4_train, 4)))
+```
+
+##新数据集全变量训练Logistic Regression结果
+```{r}
+
+model <- glm(default.payment.next.month ~ ., data = train_data_smote, family = binomial)  
+
+
+summary(model)  
+predictions <- predict(model, newdata = test_data, type = "response")  
+# 将预测值转换为分类（0 或 1）  
+predicted_class <- ifelse(predictions > 0.5, 1, 0)  
+
+```
+
+
+```{r}
+confusion_matrix <- table(Predicted = predicted_class, Actual = test_data$default.payment.next.month)  
+print(confusion_matrix)  
+
+# 计算准确率  
+accuracy <- sum(diag(confusion_matrix)) / sum(confusion_matrix)  
+print(paste("Accuracy:", round(accuracy, 4)))  
+print(paste("Error Rate:", round(1-accuracy, 4)))  
+```
+##Train error
+```{r}
+predictions_train <- predict(model, newdata = train_data, type = "response")  
+# 将预测值转换为分类（0 或 1）  
+predicted_class_train <- ifelse(predictions_train > 0.5, 1, 0)  
+confusion_matrix_train <- table(Predicted = predicted_class_train, Actual = train_data$default.payment.next.month)  
+accuracy <- sum(diag(confusion_matrix_train)) / sum(confusion_matrix_train)  
+print(paste("Accuracy:", round(accuracy, 4)))  
+print(paste("Train error:", round(1-accuracy, 4)))  
+```
+

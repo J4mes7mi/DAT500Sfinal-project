@@ -1,0 +1,52 @@
+---
+title: "Analysis"
+output: html_document
+date: "2024-12-03"
+---
+
+```{r}
+library('ggplot')
+file_path <- "default_of_credit_card_clients.CSV"   
+data <- read.csv(file_path) 
+
+data
+```
+
+
+```{r}
+# 选择部分变量 
+numeric_vars <- data[, sapply(data, is.numeric)]  
+
+selected_vars <- numeric_vars[, 1:5]  # 选择前5个数值型变量  
+pairs(selected_vars, main = "Scatterplot Matrix of Selected Variables")
+```
+
+
+```{r}
+ 
+data$default.payment.next.month <- as.factor(data$default.payment.next.month)  
+  
+ggplot(data, aes(x = as.factor(SEX), y = LIMIT_BAL, fill = default.payment.next.month)) +  
+  geom_boxplot() +  
+  labs(title = "Boxplot of Credit Limit by Gender and Default Status",  
+       x = "Gender (1 = Male, 2 = Female)",  
+       y = "Credit Limit") +  
+  theme_minimal()  
+
+ggplot(data, aes(x = as.factor(EDUCATION), y = LIMIT_BAL, fill = default.payment.next.month)) +  
+  geom_boxplot() +  
+  labs(title = "Boxplot of Credit Limit by Education Level and Default Status",  
+       x = "Education Level",  
+       y = "Credit Limit") +  
+  theme_minimal()
+```
+
+
+```{r}
+
+```
+
+
+```{r}
+
+```

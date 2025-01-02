@@ -1,0 +1,258 @@
+---
+title: "ML FINAL 456"
+author: "Purple"
+date: "2024-12-02"
+output: html_document
+---
+
+```{r}
+install.packages("tree")
+install.packages("randomForest")
+install.packages("gbm")
+install.packages("smotefamily")
+```
+
+
+```{r}
+dataset <- read.csv("/Users/purpled/Desktop/untitled folder/projectforAI/default_of_credit_card_clients.CSV")
+
+dataset$default <- as.factor(dataset$default)
+
+set.seed(123)
+train_indices <- sample(1:nrow(dataset), size = 0.7 * nrow(dataset))
+trainset <- dataset[train_indices, ]
+testset <- dataset[-train_indices, ]
+
+trainset$default <- as.factor(trainset$default)
+testset$default <- as.factor(testset$default)
+```
+
+
+Classification Tree
+```{r}
+library(tree)
+
+set.seed(123)
+train_indices <- sample(1:nrow(dataset), 0.7 * nrow(dataset))
+trainset <- dataset[train_indices, ]
+testset <- dataset[-train_indices, ]
+
+tree_model <- tree(default ~ LIMIT_BAL + SEX + EDUCATION + MARRIAGE + AGE + PAY_0 + PAY_2 + PAY_3 + PAY_4 + PAY_5 + PAY_6, data = trainset)
+
+plot(tree_model)
+text(tree_model, pretty = 0)
+
+tree_pred <- predict(tree_model, testset, type = "class")
+
+conf_matrix_tree <- table(tree_pred, testset$default)
+tree_error <- mean(tree_pred != testset$default)
+cat("\nTree Confusion Matrix:\n")
+print(conf_matrix_tree)
+cat("\nClassification Tree Test Error Rate:", tree_error, "\n")
+
+accuracy <- sum(diag(table(tree_pred, testset$default))) / sum(table(tree_pred, testset$default))
+cat("\nClassification Tree Accuracy:", accuracy, "\n")
+
+
+cv_tree <- cv.tree(tree_model, FUN = prune.misclass)
+plot(cv_tree$size, cv_tree$dev, type = "b", xlab = "Tree size", ylab = "Classification error")
+pruned_tree <- prune.misclass(tree_model, best = 7)
+plot(pruned_tree)
+text(pruned_tree, pretty = 0)
+
+pruned_pred <- predict(pruned_tree, testset, type = "class")
+
+conf_matrix_pruned <- table(pruned_pred, testset$default)
+pruned_tree_error <- mean(pruned_pred != testset$default)
+cat("\nPruned Tree Confusion Matrix:\n")
+print(conf_matrix_pruned)
+cat("\nPruned Tree Test Error Rate:", pruned_tree_error, "\n")
+
+
+```
+
+
+Bagging
+```{r}
+library(randomForest)
+
+trainset <- trainset[, !names(trainset) %in% c("default.payment.next.month")]
+testset <- testset[, !names(testset) %in% c("default.payment.next.month")]
+
+trainset$default <- as.factor(trainset$default)
+testset$default <- as.factor(testset$default)
+
+set.seed(123)
+bagging_model <- randomForest(default ~ ., data = trainset, mtry = ncol(trainset) - 1, ntree = 100)
+
+bagging_probs <- predict(bagging_model, newdata = testset, type = "prob")[, 2]
+bagging_pred <- ifelse(bagging_probs > 0.5, 1, 0)
+
+conf_matrix_bagging <- table(Predicted = bagging_pred, Actual = as.numeric(as.character(testset$default)))
+cat("\nBagging Confusion Matrix:\n")
+print(conf_matrix_bagging)
+
+bagging_accuracy <- sum(diag(conf_matrix_bagging)) / sum(conf_matrix_bagging)
+bagging_error <- mean(bagging_pred != as.numeric(as.character(testset$default)))
+cat("Bagging Accuracy:", bagging_accuracy, "\n")
+cat("Bagging Test Error Rate:", bagging_error, "\n")
+```
+
+Boosted Tree
+```{r}
+library(gbm)
+
+trainset$default <- as.numeric(as.character(trainset$default))
+testset$default <- as.numeric(as.character(testset$default))
+
+set.seed(123)
+boosted_model <- gbm(default ~ ., 
+                      data = trainset, 
+                      distribution = "bernoulli", 
+                      n.trees = 5000, 
+                      interaction.depth = 4, 
+                      shrinkage = 0.01)
+
+boosted_probs <- predict(boosted_model, newdata = testset, n.trees = 5000, type = "response")
+boosted_pred <- ifelse(boosted_probs > 0.5, 1, 0)
+
+conf_matrix_boosted <- table(Predicted = boosted_pred, Actual = testset$default)
+cat("\nBoosted Tree Confusion Matrix:\n")
+print(conf_matrix_boosted)
+
+boosted_accuracy <- sum(diag(conf_matrix_boosted)) / sum(conf_matrix_boosted)
+boosted_error <- mean(boosted_pred != testset$default)
+cat("Boosted Tree Accuracy:", boosted_accuracy, "\n")
+cat("Boosted Tree Test Error Rate:", boosted_error, "\n")
+```
+
+
+Comparing Model Performance
+```{r}
+cat("Classification Tree Error Rate:", tree_error, "\n")
+cat("Bagging Error Rate:", bagging_error, "\n")
+cat("Boosted Tree Error Rate:", boosted_error, "\n")
+```
+
+
+smote
+```{r}
+library(smotefamily)  
+
+trainset <- dataset[train_indices, ]
+testset <- dataset[-train_indices, ]
+
+trainset$default <- as.factor(trainset$default)
+testset$default <- as.factor(testset$default)
+
+set.seed(123)
+smote_result <- SMOTE(X = trainset[, -ncol(trainset)],   
+                      target = trainset$default.payment.next.month,   
+                      K = 5, dup_size = 2)  
+
+trainset_smote <- smote_result$data  
+trainset_smote$default.payment.next.month <- as.factor(trainset_smote$class)  
+trainset_smote$class <- NULL   
+
+ 
+table(trainset_smote$default.payment.next.month)  
+```
+
+Classification Tree smote
+```{r}
+trainset_smote$default <- as.factor(trainset_smote$default.payment.next.month)
+testset$default <- as.factor(testset$default)
+```
+
+
+```{r}
+library(tree)
+
+set.seed(123)
+tree_model_smote <- tree(default ~ LIMIT_BAL + SEX + EDUCATION + MARRIAGE + AGE + PAY_0 + PAY_2 + PAY_3 + PAY_4 + PAY_5 + PAY_6, 
+                         data = trainset_smote)
+
+plot(tree_model_smote)
+text(tree_model_smote, pretty = 0)
+
+tree_pred_smote <- predict(tree_model_smote, testset, type = "class")
+
+conf_matrix_tree_smote <- table(tree_pred_smote, testset$default)
+tree_error_smote <- mean(tree_pred_smote != testset$default)
+cat("\nSMOTE Tree Confusion Matrix:\n")
+print(conf_matrix_tree_smote)
+cat("\nSMOTE Classification Tree Test Error Rate:", tree_error_smote, "\n")
+
+tree_accuracy_smote <- sum(diag(conf_matrix_tree_smote)) / sum(conf_matrix_tree_smote)
+cat("\nSMOTE Classification Tree Accuracy:", tree_accuracy_smote, "\n")
+```
+
+Bagging smote
+```{r}
+library(randomForest)
+
+trainset_smote <- trainset_smote[, !names(trainset_smote) %in% "default.payment.next.month"]
+testset <- testset[, !names(testset) %in% "default.payment.next.month"]
+
+set.seed(123)
+bagging_model_smote <- randomForest(default ~ ., 
+                                    data = trainset_smote, 
+                                    mtry = sqrt(ncol(trainset_smote)),
+                                    ntree = 50)
+
+bagging_probs_smote <- predict(bagging_model_smote, newdata = testset, type = "prob")[, 2]
+bagging_pred_smote <- ifelse(bagging_probs_smote > 0.5, 1, 0)
+
+conf_matrix_smote <- table(Predicted = bagging_pred_smote, Actual = as.numeric(as.character(testset$default)))
+cat("\nSMOTE Bagging Confusion Matrix:\n")
+print(conf_matrix_smote)
+
+bagging_accuracy_smote <- sum(diag(conf_matrix_smote)) / sum(conf_matrix_smote)
+bagging_error_smote <- mean(bagging_pred_smote != as.numeric(as.character(testset$default)))
+cat("\nSMOTE Bagging Accuracy:", bagging_accuracy_smote, "\n")
+cat("SMOTE Bagging Test Error Rate:", bagging_error_smote, "\n")
+```
+
+
+
+
+Boosted Tree smote
+```{r}
+library(gbm)
+
+trainset_smote <- trainset_smote[, !names(trainset_smote) %in% "default.payment.next.month"]
+testset <- testset[, !names(testset) %in% "default.payment.next.month"]
+
+trainset_smote$default <- as.numeric(as.character(trainset_smote$default))
+testset$default <- as.numeric(as.character(testset$default))
+
+set.seed(123)
+boosted_model_smote <- gbm(default ~ ., 
+                           data = trainset_smote, 
+                           distribution = "bernoulli", 
+                           n.trees = 5000, 
+                           interaction.depth = 4, 
+                           shrinkage = 0.01)
+
+boosted_probs_smote <- predict(boosted_model_smote, newdata = testset, n.trees = 5000, type = "response")
+boosted_pred_smote <- ifelse(boosted_probs_smote > 0.5, 1, 0)
+
+conf_matrix_boosted_smote <- table(Predicted = boosted_pred_smote, Actual = testset$default)
+cat("\nSMOTE Boosted Tree Confusion Matrix:\n")
+print(conf_matrix_boosted_smote)
+
+boosted_accuracy_smote <- sum(diag(conf_matrix_boosted_smote)) / sum(conf_matrix_boosted_smote)
+boosted_error_smote <- mean(boosted_pred_smote != testset$default)
+cat("\nSMOTE Boosted Tree Accuracy:", boosted_accuracy_smote, "\n")
+cat("SMOTE Boosted Tree Test Error Rate:", boosted_error_smote, "\n")
+```
+
+
+Comparing Model Performance
+```{r}
+cat("\nSummary of SMOTE Model Results:\n")
+cat("SMOTE Classification Tree Error Rate:", tree_error_smote, "\n")
+cat("SMOTE Bagging Error Rate:", bagging_error_smote, "\n")
+cat("SMOTE Boosted Tree Error Rate:", boosted_error_smote, "\n")
+```
+
